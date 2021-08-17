@@ -1,0 +1,103 @@
+# Ejercicio 2 -------------------------------------------------------------
+
+# Importamos la base de datos (Ya tiene las fechas)
+
+datos_2 <- read_excel("C:/Users/Usuario/Desktop/Facultad/Quinto a?o/Pron?sticos/Primer parcial/Base ej2.xlsx")
+datos_2 <- as.data.frame(datos_2)
+
+#Creamos un objeto xts (Similar a un time series)
+
+fechas <- as.POSIXct(datos_2$Fecha, format = "Date")
+datos_2 <- xts(x = datos_2$TDCN, order.by = fechas)
+
+#calculamos la diferencia logar?tmica
+
+tcn <- log(datos_2)
+dl.tcn <- diff(tcn)
+dl.tcn <- dl.tcn[2:4494]
+
+#Vemos si es estacionaria la diferencia logaritmica del TCN
+
+summary(ur.df(dl.tcn,selectlags="AIC")) #Es estacionaria 
+summary(kpss.test(dl.tcn)) #Por kpss no es estacionaria
+
+
+
+#Graficamos la serie de diferencias logaritmicas del tcn
+
+plot(dl.tcn,ylim=c(-0.1,0.1),type="l",main = "Evoluci?n diferencia logar?tmica del TDCN")
+
+#Dividimos la serie en in sample y out of sample: (70% in sample y 30% out of sample)
+
+dl.tcn.in <- dl.tcn[1:3145]
+dl.tcn.out <- dl.tcn[3146:4493]
+jota <- dl.tcn[3146:4493]
+
+length(dl.tcn)*0.7
+#Testeamos la presencia de efectos ARCH
+
+arma_tcn <- auto.arima(dl.tcn.in,ic="aic",test="adf") #Estimamos el mejor modelo arma
+
+arma_tcn
+arma_tcn <- arima(dl.tcn.in,order = c(5,0,1))
+Box.test(arma_tcn$residuals,lag=13, type="Ljung-Box") # NO Rechazamos la hip?tesis nula
+residuos_arma <- arma_tcn$residuals
+
+#Ploteamos los residuos del modelo
+
+plot(y=residuos_arma,x=index(dl.tcn.in),ylim=c(-0.02,0.02),main="Residuos ARMA(5,1)",ylab="Residuos ARMA",xlab="T",type="l")
+arch.test(arma_tcn) #Rechazamos la hip?tesis nula de homocedaticidad, la varianza del error NO es constante.
+length(dl.tcn)
+stargazer(arch.test(arma_tcn))
+
+#Construimos el modelo GARCH
+
+spec.garch <- ugarchspec(mean.model=list(include.mean=T,armaOrder=c(0,0)),variance.model=list(garchOrder=c(1,1)))
+fit.garch <- ugarchfit(data = dl.tcn[2:4493], spec = spec.garch, out.sample = length(dl.tcn.out)-1)
+fcst.garch <- ugarchforecast(fit.garch, n.ahead = 1, n.roll =length(dl.tcn.out)-1 , out.sample = length(dl.tcn.out))
+fcst.garch #El modelo estimado
+pron.sigma.garch1<- t(fcst.garch@forecast$sigmaFor)
+
+#Comparo los pron?sticos contra la volatilidad realizada medida como dl.tcn**2 (Porque mostramos que es normal con media =0)
+
+#Realizamos un histograma de la diferencia logar?tmica diaria
+dl.tcn.vol.out <- dl.tcn.out ^ 2
+density <- density(dl.tcn)
+hist(dl.tcn,xlim=c(-0.02,0.02),breaks="FD",main="Histograma de devaluaci?n diaria")
+lines(density,xlim=c(-0.02,0.02),col="red")
+
+#Ahora s?, comparamos (No sin antes cambiar el formato a time series)
+
+index(dl.tcn.vol.out)
+pron.sigma.garch1 <- as.xts(pron.sigma.garch1)
+index(pron.sigma.garch1) <- index(dl.tcn.vol.out)
+
+
+#Graficamos las series
+par(mfrow=c(2,1), oma=c(0.5,0.5,0.5,0.5), mar=c(2,2,2,2))
+plot(dl.tcn.vol.out,ylim=c(0,0.0025),main="Vol out of sample")
+plot(pron.sigma.garch1 ^ 2,col="Red",ylim=c(0,0.002),main="GARCH(1,1)")
+
+#Ahora  calculamos un e-garch (1,1)
+
+spec.egarch <- ugarchspec(mean.model=list(include.mean=T,armaOrder=c(0,0)),variance.model=list(model="eGARCH", garchOrder=c(1,1)))
+fit.egarch <- ugarchfit(data = dl.tcn[2:4493], spec = spec.egarch, out.sample = length(dl.tcn.out)-1)
+fcst.egarch <- ugarchforecast(fit.egarch, n.ahead = 1, n.roll =length(dl.tcn.out)-1 , out.sample =length(dl.tcn.out))
+pron.sigma.egarch <- t(fcst.egarch@forecast$sigmaFor)
+
+index(dl.tcn.vol.out)
+pron.sigma.egarch <- as.xts(pron.sigma.egarch)
+index(pron.sigma.egarch) <- index(dl.tcn.vol.out)
+
+par(mfrow=c(2,1), oma=c(0.5,0.5,0.5,0.5), mar=c(2,2,2,2))
+plot(dl.tcn.vol.out,ylim = c(0,0.005),main="Vol out of sample")
+plot(pron.sigma.egarch ^ 2,col="Red", ylim=c(0,0.0025),main="EGARCH(1,1)")
+
+
+pron.sigma.egarch<- ts(pron.sigma.egarch, frequency = )
+
+install.packages("tsbox")
+library(tsbox)
+nowTS <-ts_ts(formerXTS)
+
+            
